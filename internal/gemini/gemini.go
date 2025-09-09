@@ -38,12 +38,19 @@ func InitGemini(ctx context.Context, apiKey, modelName string) *GeminiClient {
 		ResponseSchema: &genai.Schema{
 			Type: genai.TypeObject,
 			Properties: map[string]*genai.Schema{
-				"url":       {Type: genai.TypeString, Description: "The URL of the article"},
-				"title":     {Type: genai.TypeString, Description: "The title of the article"},
-				"summary":   {Type: genai.TypeString, Description: "A brief summary of the article"},
-				"keywords":  {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}, Description: "A list of relevant keywords"},
-				"image_url": {Type: genai.TypeString, Description: "URL of a representative image"},
-				"area":      {Type: genai.TypeString, Description: "The area or category of the article"},
+				"url":           {Type: genai.TypeString, Description: "The URL of the article"},
+				"title":         {Type: genai.TypeString, Description: "The title of the article"},
+				"summary":       {Type: genai.TypeString, Description: "A brief summary of the article"},
+				"image_url":     {Type: genai.TypeString, Description: "URL of a representative image"},
+				"organizerName": {Type: genai.TypeString, Description: "The name of the event organizer - an officially registered name"},
+				"area":          {Type: genai.TypeString, Description: "The area or category of the article"},
+				"keywords": {
+					Type: genai.TypeArray,
+					Items: &genai.Schema{
+						Type: genai.TypeString,
+					},
+					Description: "A list of relevant keywords",
+				},
 			},
 			PropertyOrdering: []string{"title", "area", "summary"},
 		},
