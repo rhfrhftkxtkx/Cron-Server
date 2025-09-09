@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	SupabaseDBURL string
-	GoogleAPIKey  string
-	GoogleCX      string
-	GeminiAPIKey  string
+	SupabaseURL            string
+	SupabaseServiceRoleKey string
+	GoogleAPIKey           string
+	GoogleCX               string
+	GeminiAPIKey           string
 }
 
 func LoadConfig() *Config {
@@ -23,10 +24,11 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		SupabaseDBURL: getEnv("SUPABASE_DB_URL", ""),
-		GoogleAPIKey:  getEnv("GOOGLE_API_KEY", ""),
-		GoogleCX:      getEnv("GOOGLE_CX", ""),
-		GeminiAPIKey:  getEnv("GEMINI_API_KEY", ""),
+		SupabaseURL:            getEnv("SUPABASE_URL", ""),
+		SupabaseServiceRoleKey: getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
+		GoogleAPIKey:           getEnv("GOOGLE_API_KEY", ""),
+		GoogleCX:               getEnv("GOOGLE_CX", ""),
+		GeminiAPIKey:           getEnv("GEMINI_API_KEY", ""),
 	}
 }
 

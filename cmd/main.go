@@ -8,24 +8,21 @@ import (
 	"github.com/BlueNyang/theday-theplace-cron/internal/crawler"
 	"github.com/BlueNyang/theday-theplace-cron/internal/database"
 	"github.com/BlueNyang/theday-theplace-cron/internal/searcher"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/supabase-community/postgrest-go"
 )
 
 func main() {
 	cfg := config.LoadConfig()
 
-	dbPool, err := database.Connect(cfg.SupabaseDBURL)
-	if err != nil {
-		log.Fatalf("[FATAL] Database connection error: %v", err)
-	}
-	defer dbPool.Close()
+	supabaseClient := database.InitSupabase(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey)
+	job(cfg, supabaseClient)
 }
 
-func job(cfg *config.Config, dbPool *pgxpool.Pool) {
+func job(cfg *config.Config, supabaseClient *postgrest.Client) {
 	log.Println("[INFO] Starting job")
 
 	//ctx := context.Background()
-	
+
 	query := ""
 	urls, err := searcher.SearchGoogle(cfg.GoogleAPIKey, cfg.GoogleCX, query, "h12")
 	if err != nil {
