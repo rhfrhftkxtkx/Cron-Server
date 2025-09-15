@@ -7,6 +7,8 @@ import (
 	"github.com/BlueNyang/theday-theplace-cron/internal/config"
 	"github.com/BlueNyang/theday-theplace-cron/internal/crawler"
 	"github.com/BlueNyang/theday-theplace-cron/internal/database"
+	"github.com/BlueNyang/theday-theplace-cron/internal/domain/common"
+	"github.com/BlueNyang/theday-theplace-cron/internal/parser"
 	"github.com/BlueNyang/theday-theplace-cron/internal/searcher"
 	"github.com/supabase-community/postgrest-go"
 )
@@ -16,6 +18,23 @@ func main() {
 
 	supabaseClient := database.InitSupabase(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey)
 	job(cfg, supabaseClient)
+}
+
+func FirstTierDataProcessing() []common.Exhibition {
+	parsers := []parser.Parser{}
+
+	var allExhibitions []common.Exhibition
+
+	for _, p := range parsers {
+		exhibitions, err := p.Crawl()
+		if err != nil {
+			log.Printf("[ERROR] Parser error: %v", err)
+			continue
+		}
+		allExhibitions = append(allExhibitions, exhibitions...)
+	}
+
+	return allExhibitions
 }
 
 func job(cfg *config.Config, supabaseClient *postgrest.Client) {
