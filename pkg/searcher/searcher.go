@@ -37,7 +37,7 @@ type GoogleSearchConfig struct {
 	Filter       string
 }
 
-func SearchGoogle(cfg GoogleSearchConfig) (GoogleSearchResult, error) {
+func SearchGoogle(cfg GoogleSearchConfig) (*GoogleSearchResult, error) {
 	baseUrl, _ := url.Parse("https://www.googleapis.com/customsearch/v1")
 
 	params := url.Values{}
@@ -63,18 +63,18 @@ func SearchGoogle(cfg GoogleSearchConfig) (GoogleSearchResult, error) {
 
 	defer TryCloseBody(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("[Error] Google search API returned status %d", resp.StatusCode)
+		log.Printf("[ERROR] Google search API returned status %d", resp.StatusCode)
 		return nil, fmt.Errorf("[Error] Google search API returned status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("[Error] Failed to read Google search response: %v", err)
+		return nil, fmt.Errorf("[ERROR] Failed to read Google search response: %v", err)
 	}
 
-	var searchResult GoogleSearchResult
+	var searchResult *GoogleSearchResult
 	if err := json.Unmarshal(body, &searchResult); err != nil {
-		return nil, fmt.Errorf("[Error] Failed to parse Google search response: %v", err)
+		return nil, fmt.Errorf("[ERROR] Failed to parse Google search response: %v", err)
 	}
 
 	return searchResult, nil
@@ -83,6 +83,6 @@ func SearchGoogle(cfg GoogleSearchConfig) (GoogleSearchResult, error) {
 func TryCloseBody(body io.ReadCloser) {
 	err := body.Close()
 	if err != nil {
-		log.Printf("[Error] Failed to close response body: %v", err)
+		log.Printf("[ERROR] Failed to close response body: %v", err)
 	}
 }

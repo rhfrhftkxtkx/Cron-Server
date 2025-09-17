@@ -1,77 +1,80 @@
 package main
 
 import (
+	"context"
 	"log"
 	"sync"
 
-	"github.com/BlueNyang/theday-theplace-cron/internal/config"
-	"github.com/BlueNyang/theday-theplace-cron/internal/crawler"
-	"github.com/BlueNyang/theday-theplace-cron/internal/database"
-	"github.com/BlueNyang/theday-theplace-cron/internal/domain/common"
-	"github.com/BlueNyang/theday-theplace-cron/internal/parser"
-	"github.com/BlueNyang/theday-theplace-cron/internal/searcher"
-	"github.com/supabase-community/postgrest-go"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/config"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/database"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/domain/common"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/parser"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/parser/instances"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/worker"
 )
 
 func main() {
 	cfg := config.LoadConfig()
+	ctx := context.Background()
 
-	supabaseClient := database.InitSupabase(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey)
-	job(cfg, supabaseClient)
+	FirstTierDataProcessing(cfg, ctx)
 }
 
-func FirstTierDataProcessing() []common.Exhibition {
-	parsers := []parser.Parser{}
+func FirstTierDataProcessing(cfg *config.Config, ctx context.Context) []*common.Exhibition {
+	parser.InitializeParsers()
 
-	var allExhibitions []common.Exhibition
+	jobsChan := make(chan instances.Job, 100)
+	resultChan := make(chan *common.Exhibition, 100)
+	var wg sync.WaitGroup
 
-	for _, p := range parsers {
-		exhibitions, err := p.Crawl()
-		if err != nil {
-			log.Printf("[ERROR] Parser error: %v", err)
-			continue
+	log.Println("[INFO] Starting worker pool")
+	numWorkers := 10
+	for i := 0; i < numWorkers; i++ {
+		go worker.Worker(ctx, cfg, &wg, jobsChan, resultChan)
+	}
+
+	supabase := database.InitSupabase(cfg)
+	crawlTargets, err := supabase.GetCrawlTargets()
+	if err != nil {
+		log.Fatalf("[ERROR] Failed to get crawl targets: %v", err)
+	}
+	log.Printf("[INFO] Fetched %d crawl targets", len(crawlTargets))
+
+	for _, target := range crawlTargets {
+		log.Printf("[INFO] Enqueuing job for URL: %s", target.URL)
+		wg.Add(1)
+
+		// Code for Only Testing
+		//if target.URL != "https://www.museum.go.kr/MUSEUM/contents/M0207000000.do" {
+		//	wg.Done()
+		//	continue
+		//}
+
+		jobsChan <- instances.Job{
+			Url:   &target.URL,
+			Depth: 1,
 		}
-		allExhibitions = append(allExhibitions, exhibitions...)
+	}
+
+	go func() {
+		wg.Wait()
+		close(jobsChan)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	var allExhibitions []*common.Exhibition
+	for resp := range resultChan {
+		allExhibitions = append(allExhibitions, resp)
+	}
+
+	err = database.SaveExhibitions(supabase.Client, allExhibitions)
+	if err != nil {
+		log.Fatalf("[ERROR] Failed to save exhibitions: %v", err)
 	}
 
 	return allExhibitions
-}
-
-func job(cfg *config.Config, supabaseClient *postgrest.Client) {
-	log.Println("[INFO] Starting job")
-
-	//ctx := context.Background()
-
-	query := ""
-	urls, err := searcher.SearchGoogle(cfg.GoogleAPIKey, cfg.GoogleCX, query, "h12")
-	if err != nil {
-		log.Printf("[ERROR] Google search error: %v", err)
-		return
-	}
-	if len(urls) == 0 {
-		log.Printf("[INFO] No new results found. Ending job.")
-		return
-	}
-
-	var wg sync.WaitGroup
-	contentChan := make(chan crawler.PageContent, len(urls))
-
-	for _, url := range urls {
-		wg.Add(1)
-		go crawler.CrawlPage(url, &wg, contentChan)
-	}
-
-	wg.Wait()
-	close(contentChan)
-
-	var pagesToProcess []crawler.PageContent
-	for content := range contentChan {
-		if content.Error != nil {
-			log.Printf("[ERROR] Failed to process page: %v", content.Error)
-		} else {
-			pagesToProcess = append(pagesToProcess, content)
-		}
-	}
-
-	// Gemini processing.
 }
