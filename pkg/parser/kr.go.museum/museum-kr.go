@@ -55,24 +55,31 @@ func convertToExhibition(url *url.URL, data *gemini.Response) (*common.Exhibitio
 
 	log.Printf("[INFO] (parser...museum.convertToExhibition) Received data: %+v\n", *data)
 
-	reg := regexp.MustCompile(`https://www.museum.go.kr.*`)
-
 	parsedImageURL, err := url.Parse(data.ImageURL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid image URL: %v", err)
 	}
 
-	if parsedImageURL.Hostname() == "" {
-		data.ImageURL = "https://www.museum.go.kr" + data.ImageURL
+	if parsedImageURL.Host == "" {
+		parsedImageURL.Host = "www.museum.go.kr"
+		parsedImageURL.Scheme = "https"
+		data.ImageURL = parsedImageURL.String()
 	}
 
 	if data.Title == "" || data.StartDate == "" || data.EndDate == "" {
 		return nil, nil, fmt.Errorf("missing required fields in data: %+v", *data)
 	}
 
+	parsedRelatedURL, err := url.Parse(data.RelatedURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid related URL: %v", err)
+	}
+
 	if data.Depth < 2 && data.RelatedURL != "" && data.RelatedURL != url.String() {
-		if !reg.MatchString(data.RelatedURL) {
-			data.RelatedURL = url.Scheme + "://" + url.Hostname() + data.RelatedURL
+		if parsedRelatedURL.Host == "" {
+			parsedRelatedURL.Host = "www.museum.go.kr"
+			parsedRelatedURL.Scheme = "https"
+			data.RelatedURL = parsedRelatedURL.String()
 		}
 		data.Depth = data.Depth + 1
 		return nil, data, nil
@@ -94,7 +101,7 @@ func convertToExhibition(url *url.URL, data *gemini.Response) (*common.Exhibitio
 	return &exhibition, nil, nil
 }
 
-func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
+func (m *Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
 	client, err := gemini.InitGemini(ctx, cfg.GoogleAPIKey, "gemini-2.5-flash-lite")
 	if err != nil {
 		return nil, fmt.Errorf("[ERROR] (parser...museum.Parsing) InitGemini error: %v", err)
@@ -135,8 +142,10 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job)
 				log.Println("[ERROR] (parser...museum.processExhibition) Invalid sub-job URL: ", subJob.RelatedURL, " error: ", err)
 				continue
 			}
-			if dataUrl.Hostname() == "" {
-				subJob.RelatedURL = job.Url.Scheme + "://" + job.Url.Hostname() + subJob.RelatedURL
+
+			if dataUrl.Host == "" {
+				dataUrl.Host = job.Url.Host
+				dataUrl.Scheme = job.Url.Scheme
 			}
 
 			discoveredJobs = append(discoveredJobs, &parser.Job{
@@ -155,6 +164,6 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job)
 	}, nil
 }
 
-func GetMuseum() Museum {
-	return Museum{}
+func GetMuseum() parser.MuseumPageParser {
+	return &Museum{}
 }

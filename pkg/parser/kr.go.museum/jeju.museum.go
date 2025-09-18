@@ -14,33 +14,33 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-type BuyeoMuseum struct {
+type JejuMuseum struct {
 }
 
-func (b *BuyeoMuseum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
+func (b *JejuMuseum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
 	switch job.Url.Path {
-	case "/speclExhibit/view.do":
+	case "/_prog/special_exhibit/index.php":
 		return b.parseDetailPage(ctx, cfg, job)
 	}
 
 	return nil, nil
 }
 
-func (b *BuyeoMuseum) parseDetailPage(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
-	log.Println("[INFO] (buyeo.parseDetailPage) Parsing detail page ", job.Url)
+func (b *JejuMuseum) parseDetailPage(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
+	log.Println("[INFO] (jeju.parseDetailPage) Parsing detail page ", job.Url)
 
 	if job.Url.Host == "" {
-		job.Url.Host = "buyeo.museum.go.kr"
+		job.Url.Host = "jeju.museum.go.kr"
 		job.Url.Scheme = "https"
 	}
 
 	doc, err := crawler.DoCrawl(job.Url.String())
 	if err != nil {
-		log.Println("[ERROR] (buyeo.parseDetailPage) Error crawling detail page: ", err)
+		log.Println("[ERROR] (jeju.parseDetailPage) Error crawling detail page: ", err)
 		return nil, err
 	}
 
-	img := doc.Find(".swiper-slide > img")
+	img := doc.Find("figure > img")
 	imageURLStr, exists := img.Attr("src")
 	if !exists {
 		imageURLStr = ""
@@ -51,46 +51,45 @@ func (b *BuyeoMuseum) parseDetailPage(ctx context.Context, cfg *config.Config, j
 		imageURL = &url.URL{}
 	}
 	if imageURL.Host == "" {
-		imageURL.Host = "buyeo.museum.go.kr"
+		imageURL.Host = "jeju.museum.go.kr"
 		imageURL.Scheme = "https"
 	}
 
-	title := doc.Find("strong.ti").Text()
-	var sDate, eDate, summary string
-	doc.Find("div.text > ul > li").Each(func(i int, s *goquery.Selection) {
-		label := s.Find("strong").Text()
-		value := s.Find("em").Text()
+	summary := doc.Find("div.exhib_detail_txt").Find("img, br").Remove().End().Text()
+	var sDate, eDate, title string
+	doc.Find("div.exhib_info > ul > li").Each(func(i int, s *goquery.Selection) {
+		label := s.Find("b").Text()
+		value := s.Find("span").Text()
 
 		switch label {
-		case "기간":
+		case "전시명":
+			title = value
+		case "전시기간":
 			dates := value
 			if len(dates) >= 23 {
-
 				dates = strings.TrimSpace(dates)
 				dates = strings.ReplaceAll(dates, ".", "-")
 				dates = strings.ReplaceAll(dates, " ~ ", "~")
 				sDate = dates[0:10]
 				eDate = dates[11:21]
 			}
-		case "내용":
-			summary = value
 		}
 	})
 
 	tempDate, err := time.Parse("2006-01-02", sDate)
 	if err != nil {
-		log.Println("[ERROR] (buyeo.parseExhibitions) Error parsing start date: ", err)
+		log.Println("[ERROR] (jeju.parseExhibitions) Error parsing start date: ", err)
 		return nil, err
 	}
 	if tempDate.Before(time.Now()) {
-		log.Println("[INFO] (buyeo.parseExhibitions) Exhibition already ended, skipping")
+		log.Println("[INFO] (jeju.parseExhibitions) Exhibition already ended, skipping")
 	}
 
 	return &parser.ParseResult{
 		FoundExhibitions: []*common.Exhibition{
 			{
-				ExhibitionId:     common.GenerateExhibitionId("buyeomuseum", sDate, title),
-				VenueVisitKor2Id: "130062",
+				ExhibitionId:     common.GenerateExhibitionId("jejumuseum", sDate, title),
+				VenueVisitKor2Id: "130461",
 				DataSourceTier:   1,
 				Title:            title,
 				Summary:          summary,
@@ -104,6 +103,6 @@ func (b *BuyeoMuseum) parseDetailPage(ctx context.Context, cfg *config.Config, j
 	}, nil
 }
 
-func GetBuyeoMuseum() parser.MuseumPageParser {
-	return &BuyeoMuseum{}
+func GetJejuMuseum() parser.MuseumPageParser {
+	return &JejuMuseum{}
 }

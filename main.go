@@ -46,7 +46,12 @@ func FirstTierDataProcessing(cfg *config.Config, ctx context.Context) []*common.
 		wg.Add(1)
 
 		// Code for Only Testing
-		//if target.URL != "https://www.museum.go.kr/MUSEUM/contents/M0207000000.do" {
+		//temp, err := url.Parse(target.URL)
+		//if err != nil {
+		//	wg.Done()
+		//	continue
+		//}
+		//if temp.Host != "www.museum.go.kr" && temp.Host != "jeonju.museum.go.kr" {
 		//	wg.Done()
 		//	continue
 		//}

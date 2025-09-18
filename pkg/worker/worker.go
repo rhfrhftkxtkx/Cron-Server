@@ -18,7 +18,7 @@ func Worker(ctx context.Context, cfg *config.Config, wg *sync.WaitGroup, jobs ch
 	for job := range jobs {
 		// URL에서 ?(쿼리문) 이전까지의 문자열을 키로 사용
 		log.Printf("[INFO] (worker.Worker) Worker received job %+v\n", job)
-		hostname := job.Url.Hostname()
+		hostname := job.Url.Host
 		log.Printf("[INFO] (worker.Worker) Extracted hostname: %s\n", hostname)
 
 		//hostname := strings.SplitN(*job.Url, "?", 2)[0]
