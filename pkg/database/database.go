@@ -44,7 +44,7 @@ func SaveExhibitions(client *supabase.Client, exhibitions []*common.Exhibition) 
 	}
 
 	execute, i, err := client.From("exhibitions").
-		Upsert(exhibitions, "exhibition_id", "", "").
+		Insert(exhibitions, true, "exhibition_id", "", "").
 		Execute()
 	if err != nil {
 		log.Println("[ERROR] (database.SaveExhibitions) Failed to insert exhibitions:", err)

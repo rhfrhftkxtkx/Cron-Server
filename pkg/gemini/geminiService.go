@@ -46,15 +46,42 @@ func InitGemini(ctx context.Context, apiKey, modelName string) (*Client, error) 
 			Items: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"title":      {Type: genai.TypeString, Description: "An officially registered title of the exhibition information"},
-					"summary":    {Type: genai.TypeString, Description: "A brief summary of the overview max 500 characters"},
-					"startDate":  {Type: genai.TypeString, Description: "Start date of the exhibition in YYYY-MM-DD format"},
-					"endDate":    {Type: genai.TypeString, Description: "End date of the exhibition in YYYY-MM-DD format"},
-					"imageUrl":   {Type: genai.TypeString, Description: "URL of a representative image"},
-					"venueName":  {Type: genai.TypeString, Description: "An officially registered name of the event organizer"},
-					"venueArea":  {Type: genai.TypeString, Description: "Area of the organization holding the exhibition"},
-					"relatedURL": {Type: genai.TypeString, Description: "**An absolute URL** for the detailed exhibition page. If the extracted href is a relative path (e.g., '/path', './path'), it **must be combined with the base of 'currentUrl'** to form a complete, absolute URL. Null if **no separate detailed page exists** or if the found URL is functionally identical to the 'currenturl'."},
-					"depth":      {Type: genai.TypeInteger, Description: "return the current depth"},
+					"title": {
+						Type:        genai.TypeString,
+						Description: "The title of the exhibition.",
+					},
+					"summary": {
+						Type:        genai.TypeString,
+						Description: "A summary of the exhibition's details, with a maximum of 200 characters. If a meaningful summary of 50 characters or less cannot be extracted, the value must be null.",
+					},
+					"startDate": {
+						Type:        genai.TypeString,
+						Description: "The start date of the exhibition, formatted as YYYY-MM-DD.",
+					},
+					"endDate": {
+						Type:        genai.TypeString,
+						Description: "The end date of the exhibition, formatted as YYYY-MM-DD.",
+					},
+					"imageUrl": {
+						Type:        genai.TypeString,
+						Description: "The URL of the exhibition poster. It can be found in an `<img>` tag or a `background-image` style property. The URL must be an absolute path. If it's not an absolute path or cannot be found, the value must be null.",
+					},
+					"venueName": {
+						Type:        genai.TypeString,
+						Description: "The official name of the host institution or venue.",
+					},
+					"venueArea": {
+						Type:        genai.TypeString,
+						Description: "The location where the exhibition is held, based on the city name. Include more detailed information if available. If not found, the value must be null.",
+					},
+					"relatedURL": {
+						Type:        genai.TypeString,
+						Description: "VERY IMPORTANT: Find a URL that likely leads to more detailed information about this specific exhibition. It must be an absolute path. Do not extract URLs from links with text like 'list', 'menu', or other navigational elements. If the URL consists only of a query string (e.g., '?id=123'), construct the absolute URL based on the current URL. The found URL must not be the same as or a parent of the current URL. If no suitable URL is found or the conditions are violated, the value must be null.",
+					},
+					"depth": {
+						Type:        genai.TypeInteger,
+						Description: "This is an informational field representing the current crawling depth. Return the provided input value without any changes.",
+					},
 				},
 				Description: "A structured representation of the exhibition information, ",
 			},
@@ -64,7 +91,7 @@ func InitGemini(ctx context.Context, apiKey, modelName string) (*Client, error) 
 	geminiClient := &Client{
 		Client:     client,
 		ModelName:  modelName,
-		BasePrompt: "Extract the title, summary, period (startDate, endDate), imageUrl, venueName, venueArea, relatedURL, and depth from the following web page content about exhibition information. Provide the output in JSON array format with the specified fields. \ndata: \n",
+		BasePrompt: "You are an expert AI that extracts exhibition information from a given HTML document.\nYour task is to analyze the provided HTML content and extract the information based on the defined JSON schema.\nPlease adhere to the following rules for each field:\n",
 		Config:     config,
 	}
 
@@ -74,31 +101,9 @@ func InitGemini(ctx context.Context, apiKey, modelName string) (*Client, error) 
 
 func (geminiClient *Client) Processing(ctx context.Context, url, webPage string, depth int) (*[]Response, error) {
 	log.Println("[INFO] (gemini.processing) Processing...")
-	prompt := `%s
----
-## **Overall Data Extraction Strategy**
-1.  **If the current page contains detailed information,** extract data for all fields.
-2.  **If the current page is a list or summary page with insufficient data** (e.g., the summary or dates are missing), you must follow these steps:
-- Set fields with missing information to an empty string.
-- You **MUST** find and include the 'relatedURL' that leads to the detail page. In this situation, 'relatedURL' cannot be an empty string or "null".
----
-## **'relatedURL' Formatting Rules**
-1. The 'relatedURL' must be a full, absolute URL starting with 'http://' or 'https://'.
-2. If a relative path is found (e.g., starts with '/'), prepend the protocol and domain from the 'currenturl'.
-3. If only a query string is found (e.g., starts with '?'), prepend the 'currenturl' up to its path.
-4. If a URL is missing its protocol (e.g., 'www.example.com/page'), add 'https://'.
-5. If the page contains sufficient data (as per the Overall Strategy), and no link to a more detailed page exists (or the link is for the current page), the value for 'relatedURL' **MUST** be an empty string.
----
-## **Examples**
-- **On a detail page:** If 'currenturl' is 'https://example.com/events/detail?id=123' and all data is present, fill all fields and set 'relatedURL' to an empty string.
-- **On a list page:** If 'currenturl' is 'https://example.com/events/list' and it only contains titles and thumbnails for each item, you must set missing fields like 'summary' and 'startDate' to an empty string and provide a valid, absolute 'relatedURL' to its detail page.
----
-data:
-  current depth: %d
-  current URL: %s
-  document: %s
-`
-	content := fmt.Sprintf(prompt, geminiClient.BasePrompt, depth, url, webPage)
+	prompt := "%s\n- **title**: Extract the main title of the exhibition.\n- **summary**: Provide a concise summary of the exhibition, up to 200 characters. If you can only find a very short or meaningless summary (less than 50 characters), return null.\n- **startDate**: Find the start date and format it as YYYY-MM-DD.\n- **endDate**: Find the end date and format it as YYYY-MM-DD.\n- **imageUrl**: Find the poster image URL. It must be an absolute URL (starts with http or https). Look for it in `<img>` tags or CSS `background-image` properties. If you cannot find an absolute URL, return null.\n- **venueName**: Extract the official name of the venue or organizer.\n- **venueArea**: Identify the city where the exhibition is held. If more specific location details are available, include them. If not found, return null.\n- **relatedURL**: This is the most critical task. Find a single URL that points to a more detailed page for THIS SPECIFIC exhibition.\n  - The URL **must be an absolute path**. If you find a relative path (e.g., `/detail/123`) or just a query string (e.g., `?id=123`), you must combine it with the `currenturl` to create a full, absolute URL.\n  - The URL **must NOT** be for a list, menu, or main page. It should be a deeper, more specific page.\n  - The URL **must NOT** be the same as the `currenturl` or a parent page of the `currenturl`.\n  - If you cannot find a URL that meets all these criteria, you **must** return null.\n- **depth**: This is just an input value. Return the exact same integer value you receive.\n\nNow, process the following data.\n\ncurrenturl: %s,\ndepth: %d,\ndocs: %s"
+
+	content := fmt.Sprintf(prompt, geminiClient.BasePrompt, url, depth, webPage)
 
 	result, err := geminiClient.Client.Models.GenerateContent(
 		ctx,

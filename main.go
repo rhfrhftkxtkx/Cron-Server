@@ -9,7 +9,7 @@ import (
 	"github.com/BlueNyang/theday-theplace-cron/pkg/database"
 	"github.com/BlueNyang/theday-theplace-cron/pkg/domain/common"
 	"github.com/BlueNyang/theday-theplace-cron/pkg/parser"
-	"github.com/BlueNyang/theday-theplace-cron/pkg/parser/instances"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/parser/initializer"
 	"github.com/BlueNyang/theday-theplace-cron/pkg/worker"
 )
 
@@ -21,9 +21,9 @@ func main() {
 }
 
 func FirstTierDataProcessing(cfg *config.Config, ctx context.Context) []*common.Exhibition {
-	parser.InitializeParsers()
+	initializer.InitializeParsers()
 
-	jobsChan := make(chan instances.Job, 100)
+	jobsChan := make(chan parser.Job, 100)
 	resultChan := make(chan *common.Exhibition, 100)
 	var wg sync.WaitGroup
 
@@ -50,7 +50,7 @@ func FirstTierDataProcessing(cfg *config.Config, ctx context.Context) []*common.
 		//	continue
 		//}
 
-		jobsChan <- instances.Job{
+		jobsChan <- parser.Job{
 			Url:   &target.URL,
 			Depth: 1,
 		}

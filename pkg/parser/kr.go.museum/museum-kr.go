@@ -10,12 +10,11 @@ import (
 	"github.com/BlueNyang/theday-theplace-cron/pkg/crawler"
 	"github.com/BlueNyang/theday-theplace-cron/pkg/domain/common"
 	"github.com/BlueNyang/theday-theplace-cron/pkg/gemini"
-	"github.com/BlueNyang/theday-theplace-cron/pkg/parser/instances"
+	"github.com/BlueNyang/theday-theplace-cron/pkg/parser"
 	"github.com/PuerkitoBio/goquery"
 )
 
 type Museum struct {
-	url string
 }
 
 func optimizeHtml(content *goquery.Selection) *string {
@@ -35,7 +34,7 @@ func optimizeHtml(content *goquery.Selection) *string {
 
 	html, err := content.Html()
 	if err != nil {
-		log.Println("[ERROR] (kr.go.museum.go.museum.parser.go) OptimizeHtml error: ", err)
+		log.Println("[ERROR] (kr.go.museum.go.museum.museum-kr.go) OptimizeHtml error: ", err)
 		return nil
 	}
 
@@ -43,7 +42,7 @@ func optimizeHtml(content *goquery.Selection) *string {
 		html = reg.ReplaceAllString(html, "")
 	}
 
-	fmt.Println(html)
+	//log.Println(html)
 	return &html
 }
 
@@ -53,7 +52,23 @@ func convertToExhibition(url string, data *gemini.Response) (*common.Exhibition,
 		return nil, nil, fmt.Errorf("data is nil")
 	}
 
-	if data.Depth < 3 && data.RelatedURL != "" && data.RelatedURL != url {
+	log.Printf("[INFO] (parser...museum.convertToExhibition) Received data: %+v\n", *data)
+
+	reg := regexp.MustCompile(`https://www.museum.go.kr.*`)
+
+	if !reg.MatchString(data.ImageURL) {
+		data.ImageURL = "https://www.museum.go.kr" + data.ImageURL
+	}
+
+	if data.Title == "" || data.StartDate == "" || data.EndDate == "" {
+		return nil, nil, fmt.Errorf("missing required fields in data: %+v", *data)
+	}
+
+	if data.Depth < 2 && data.RelatedURL != "" && data.RelatedURL != url {
+		if !reg.MatchString(data.RelatedURL) {
+			baseURL := regexp.MustCompile(`\?`).Split(url, -1)[0]
+			data.RelatedURL = baseURL + data.RelatedURL
+		}
 		data.Depth = data.Depth + 1
 		return nil, data, nil
 	}
@@ -74,7 +89,7 @@ func convertToExhibition(url string, data *gemini.Response) (*common.Exhibition,
 	return &exhibition, nil, nil
 }
 
-func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job instances.Job) (*instances.ParseResult, error) {
+func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job) (*parser.ParseResult, error) {
 	client, err := gemini.InitGemini(ctx, cfg.GoogleAPIKey, "gemini-2.5-flash-lite")
 	if err != nil {
 		return nil, fmt.Errorf("[ERROR] (parser...museum.Parsing) InitGemini error: %v", err)
@@ -94,14 +109,14 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job instances.J
 		return nil, fmt.Errorf("[ERROR] (parser...museum.processExhibition) contentHtml is nil or empty: %v", err)
 	}
 
-	dataList, err := client.Processing(ctx, m.url, *contentHtml, job.Depth)
+	dataList, err := client.Processing(ctx, *job.Url, *contentHtml, job.Depth)
 	if err != nil {
 		return nil, fmt.Errorf("[ERROR] (parser...museum.processExhibition) Gemini Processing error: %v", err)
 	}
 	log.Printf("[INFO] (parser...museum.processExhibition) Gemini returned %d items\n", len(*dataList))
 
 	var foundedExhibitions []*common.Exhibition
-	var discoveredJobs []*instances.Job
+	var discoveredJobs []*parser.Job
 
 	for _, data := range *dataList {
 		exhibition, subJob, err := convertToExhibition(*job.Url, &data)
@@ -109,7 +124,7 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job instances.J
 			log.Println("[ERROR] (parser...museum.processExhibition) convertToExhibition error: ", err)
 		} else if subJob != nil {
 			log.Println("[INFO] (parser...museum.processExhibition) Enqueuing sub-job for URL: ", subJob.RelatedURL)
-			discoveredJobs = append(discoveredJobs, &instances.Job{
+			discoveredJobs = append(discoveredJobs, &parser.Job{
 				Url:   &subJob.RelatedURL,
 				Depth: subJob.Depth,
 			})
@@ -119,12 +134,12 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job instances.J
 		}
 	}
 
-	return &instances.ParseResult{
+	return &parser.ParseResult{
 		FoundExhibitions: foundedExhibitions,
 		DiscoveredJobs:   discoveredJobs,
 	}, nil
 }
 
-func GetMuseum(url string) Museum {
-	return Museum{url: url}
+func GetMuseum() Museum {
+	return Museum{}
 }
