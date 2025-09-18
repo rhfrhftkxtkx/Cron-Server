@@ -2,6 +2,7 @@ package parser
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/BlueNyang/theday-theplace-cron/pkg/config"
 	"github.com/BlueNyang/theday-theplace-cron/pkg/domain/common"
@@ -17,6 +18,6 @@ type ParseResult struct {
 }
 
 type Job struct {
-	Url   *string
+	Url   *url.URL
 	Depth int
 }

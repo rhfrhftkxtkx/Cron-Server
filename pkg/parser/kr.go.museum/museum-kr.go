@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"regexp"
 
 	"github.com/BlueNyang/theday-theplace-cron/pkg/config"
@@ -46,7 +47,7 @@ func optimizeHtml(content *goquery.Selection) *string {
 	return &html
 }
 
-func convertToExhibition(url string, data *gemini.Response) (*common.Exhibition, *gemini.Response, error) {
+func convertToExhibition(url *url.URL, data *gemini.Response) (*common.Exhibition, *gemini.Response, error) {
 	log.Println("[INFO] (parser...museum.convertToExhibition) Converting Gemini response to Exhibition struct")
 	if data == nil {
 		return nil, nil, fmt.Errorf("data is nil")
@@ -56,7 +57,12 @@ func convertToExhibition(url string, data *gemini.Response) (*common.Exhibition,
 
 	reg := regexp.MustCompile(`https://www.museum.go.kr.*`)
 
-	if !reg.MatchString(data.ImageURL) {
+	parsedImageURL, err := url.Parse(data.ImageURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid image URL: %v", err)
+	}
+
+	if parsedImageURL.Hostname() == "" {
 		data.ImageURL = "https://www.museum.go.kr" + data.ImageURL
 	}
 
@@ -64,10 +70,9 @@ func convertToExhibition(url string, data *gemini.Response) (*common.Exhibition,
 		return nil, nil, fmt.Errorf("missing required fields in data: %+v", *data)
 	}
 
-	if data.Depth < 2 && data.RelatedURL != "" && data.RelatedURL != url {
+	if data.Depth < 2 && data.RelatedURL != "" && data.RelatedURL != url.String() {
 		if !reg.MatchString(data.RelatedURL) {
-			baseURL := regexp.MustCompile(`\?`).Split(url, -1)[0]
-			data.RelatedURL = baseURL + data.RelatedURL
+			data.RelatedURL = url.Scheme + "://" + url.Hostname() + data.RelatedURL
 		}
 		data.Depth = data.Depth + 1
 		return nil, data, nil
@@ -83,7 +88,7 @@ func convertToExhibition(url string, data *gemini.Response) (*common.Exhibition,
 		StartDate:        data.StartDate,
 		EndDate:          data.EndDate,
 		ImageUrl:         data.ImageURL,
-		SourceURL:        url,
+		SourceURL:        url.String(),
 	}
 
 	return &exhibition, nil, nil
@@ -95,8 +100,8 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job)
 		return nil, fmt.Errorf("[ERROR] (parser...museum.Parsing) InitGemini error: %v", err)
 	}
 
-	log.Println("[INFO] (parser...museum.Parsing) Processing URL: ", *job.Url, " at depth: ", job.Depth)
-	doc, err := crawler.DoCrawl(*job.Url)
+	log.Println("[INFO] (parser...museum.Parsing) Processing URL: ", job.Url.String(), " at depth: ", job.Depth)
+	doc, err := crawler.DoCrawl(job.Url.String())
 	if err != nil {
 		return nil, fmt.Errorf("[ERROR] (parser...museum.Parsing) DoCrawl error: %v", err)
 	}
@@ -109,7 +114,7 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job)
 		return nil, fmt.Errorf("[ERROR] (parser...museum.processExhibition) contentHtml is nil or empty: %v", err)
 	}
 
-	dataList, err := client.Processing(ctx, *job.Url, *contentHtml, job.Depth)
+	dataList, err := client.Processing(ctx, job.Url, *contentHtml, job.Depth)
 	if err != nil {
 		return nil, fmt.Errorf("[ERROR] (parser...museum.processExhibition) Gemini Processing error: %v", err)
 	}
@@ -119,13 +124,23 @@ func (m Museum) Parsing(ctx context.Context, cfg *config.Config, job parser.Job)
 	var discoveredJobs []*parser.Job
 
 	for _, data := range *dataList {
-		exhibition, subJob, err := convertToExhibition(*job.Url, &data)
+		exhibition, subJob, err := convertToExhibition(job.Url, &data)
 		if err != nil {
 			log.Println("[ERROR] (parser...museum.processExhibition) convertToExhibition error: ", err)
 		} else if subJob != nil {
 			log.Println("[INFO] (parser...museum.processExhibition) Enqueuing sub-job for URL: ", subJob.RelatedURL)
+
+			dataUrl, err := url.Parse(subJob.RelatedURL)
+			if err != nil {
+				log.Println("[ERROR] (parser...museum.processExhibition) Invalid sub-job URL: ", subJob.RelatedURL, " error: ", err)
+				continue
+			}
+			if dataUrl.Hostname() == "" {
+				subJob.RelatedURL = job.Url.Scheme + "://" + job.Url.Hostname() + subJob.RelatedURL
+			}
+
 			discoveredJobs = append(discoveredJobs, &parser.Job{
-				Url:   &subJob.RelatedURL,
+				Url:   dataUrl,
 				Depth: subJob.Depth,
 			})
 		} else {

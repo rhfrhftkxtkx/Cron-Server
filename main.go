@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/url"
 	"sync"
 
 	"github.com/BlueNyang/theday-theplace-cron/pkg/config"
@@ -50,8 +51,15 @@ func FirstTierDataProcessing(cfg *config.Config, ctx context.Context) []*common.
 		//	continue
 		//}
 
+		targetUrl, err := url.Parse(target.URL)
+		if err != nil {
+			log.Printf("[ERROR] Invalid URL %s: %v", target.URL, err)
+			wg.Done()
+			continue
+		}
+
 		jobsChan <- parser.Job{
-			Url:   &target.URL,
+			Url:   targetUrl,
 			Depth: 1,
 		}
 	}

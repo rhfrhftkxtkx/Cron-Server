@@ -10,5 +10,5 @@ import (
 func InitializeParsers() {
 	log.Println("[INFO] (parser.init) Initializing parsers...")
 	// Register museum.go.kr.go.museum parser
-	registry.Register("https://www.museum.go.krfffffffffffff", kr_go_museum.GetMuseum())
+	registry.Register("https://www.museum.go.kr", kr_go_museum.GetMuseum())
 }

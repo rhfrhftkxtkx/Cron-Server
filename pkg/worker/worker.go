@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"log"
-	"net/url"
 	"sync"
 
 	"github.com/BlueNyang/theday-theplace-cron/pkg/config"
@@ -19,30 +18,11 @@ func Worker(ctx context.Context, cfg *config.Config, wg *sync.WaitGroup, jobs ch
 	for job := range jobs {
 		// URL에서 ?(쿼리문) 이전까지의 문자열을 키로 사용
 		log.Printf("[INFO] (worker.Worker) Worker received job %+v\n", job)
+		hostname := job.Url.Hostname()
+		log.Printf("[INFO] (worker.Worker) Extracted hostname: %s\n", hostname)
 
-		////regex로 https:// ~~ .??/ 까지 자르기
-		//reg := regexp.MustCompile("^(https?://[^/]+)")
-		//matches := reg.FindStringSubmatch(*job.Url)
-		//if len(matches) < 2 {
-		//	log.Printf("[ERROR] (worker.Worker) URL format error: %s\n", *job.Url)
-		//	wg.Done()
-		//	continue
-		//}
-
-		jobUrl, err := url.Parse(*job.Url)
-		if err != nil {
-			log.Printf("[ERROR] (worker.Worker) URL parse error: %+v\n", err)
-			wg.Done()
-			continue
-		}
-		domain := jobUrl.Hostname()
-		log.Printf("[INFO] (worker.Worker) Parsed domain: %s\n", domain)
-
-		//domain := strings.TrimSuffix(matches[1], "/")
-		log.Printf("[INFO] (worker.Worker) Extracted domain: %s\n", domain)
-
-		//domain := strings.SplitN(*job.Url, "?", 2)[0]
-		p, err := registry.GetParser(domain)
+		//hostname := strings.SplitN(*job.Url, "?", 2)[0]
+		p, err := registry.GetParser(hostname)
 		if err != nil {
 			log.Printf("[ERROR] (worker.Worker) GetParser error: %+v\n", err)
 			wg.Done()
